@@ -1,0 +1,165 @@
+openapi: 3.0.0
+
+info:
+  title: demo-apigw-integrations
+  version: 0.3.0
+  description: "This is an example OpenAPI specification"
+  termsOfService: "http://example.com/tos"
+  contact:
+    email: "example@example.com"
+x-amazon-apigateway-request-validators:
+  all:
+    validateRequestBody: true
+    validateRequestParameters: true
+  params:
+    validateRequestBody: true
+    validateRequestParameters: true
+  body:
+    validateRequestBody: true
+    validateRequestParameters: false
+
+paths:
+  /testFunc:
+    get:
+      operationId: testFunc
+      description: Test integration with Lambda straight pass through payload.
+      x-amazon-apigateway-request-validator: params
+      parameters:
+        - in: query
+          name: testQuery
+          description: a test parameter to see how parameters are passed via swagger & API Gateway.
+          required: true
+          schema:
+            type: string
+      x-amazon-apigateway-integration:
+        credentials:
+          Fn::Sub: ${ApiRole.Arn}
+        uri:
+          Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${TestFunction.Arn}/invocations
+        httpMethod: POST
+        timeoutInMillis: 3000
+        type: "aws_proxy"
+      responses:
+        "200":
+          description: A 200 response.
+          content:
+            application/json:
+              schema:
+                type: object
+        "400":
+          description: bad input parameter
+    post:
+      operationId: testFunc
+      description: Test integration with Lambda with request-response template mapping.
+      x-amazon-apigateway-request-validator: params
+      x-amazon-apigateway-integration:
+        credentials:
+          Fn::Sub: ${ApiRole.Arn}
+        uri:
+          Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${TestFunction.Arn}/invocations
+        httpMethod: POST
+        timeoutInMillis: 3000
+        type: "aws"
+        requestTemplates:
+          # Transform request body before sending to Lambda
+          "application/json": '#set ($root=$input.path(''$'')) { "stage": "$root.name", "userId": "$root.key" }'
+        responses:
+          "4\\d{2}":
+            statusCode: 400
+          "5\\d{2}":
+            statusCode: 500
+          default:
+            statusCode: 200
+            responseTemplates:
+              # Transform Lambda response before sending back to API
+              "application/json": '#set ($root=$input.path(''$'')) { "responseName": "$root.body.stage", "responseKey": "$root.body.userId" }'
+      passthroughBehavior: when_no_match
+      responses:
+        "200":
+          description: A 200 response.
+          content:
+            application/json:
+              schema:
+                type: object
+        "400":
+          description: bad input parameter
+  /testS3List:
+    get:
+      operationId: testS3List
+      description: Test integration with S3
+      x-amazon-apigateway-request-validator: params
+      parameters:
+        - in: query
+          name: bucket
+          description: S3 list objects demo.
+          required: true
+          schema:
+            type: string
+      x-amazon-apigateway-integration:
+        credentials:
+          Fn::Sub: ${ApiRole.Arn}
+        uri:
+          Fn::Sub: "arn:aws:apigateway:${AWS::Region}:s3:path/deployments2131"
+        timeoutInMillis: 3000
+        requestParameters: |
+          {"integration.request.path.bucket": "method.request.path.bucket"}
+        responses:
+          "4\\d{2}":
+            statusCode: 400
+          "5\\d{2}":
+            statusCode: 500
+          default:
+            statusCode: 200
+        passthroughBehavior: when_no_match
+        httpMethod: GET
+        type: "aws"
+      responses:
+        "200":
+          description: A 200 response.
+          content:
+            application/json:
+              schema:
+                type: object
+        "400":
+          description: bad input parameter
+        "500":
+          description: server error
+
+components:
+  schemas:
+    Item:
+      type: object
+      required:
+        - id
+        - name
+        - manufacturer
+        - releaseDate
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: d290f1ee-6c54-4b01-90e6-d701748f0851
+        name:
+          type: string
+          example: Widget Adapter
+        releaseDate:
+          type: string
+          format: date-time
+          example: "2016-08-29T09:12:33.001Z"
+        manufacturer:
+          $ref: "#/components/schemas/Manufacturer"
+    Manufacturer:
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          example: ACME Corporation
+        homePage:
+          type: string
+          format: url
+          example: "https://www.acme-corp.com"
+        phone:
+          type: string
+          example: 408-867-5309
+      type: object
