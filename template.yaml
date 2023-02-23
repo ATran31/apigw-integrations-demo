@@ -1,0 +1,105 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: "AWS::Serverless-2016-10-31"
+Parameters:
+  AppName:
+    Type: String
+    Default: apigw-demo-integrations
+  Stage:
+    Type: String
+    Default: dev
+  HostedZone:
+    Type: String
+    Default: ""
+  BucketName:
+    Type: String
+    Default: deployments2131
+
+Resources:
+  ApiRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${AppName}-api-execution-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - apigateway.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonAPIGatewayPushToCloudWatchLogs
+        - arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess
+      Policies:
+        - PolicyName: !Sub "${AppName}-api-execution-role-policy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - lambda:InvokeFunction
+                Resource: !Sub "${TestFunction.Arn}"
+
+  DemoApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      # MethodSettings:
+      #   - LoggingLevel: INFO
+      #     ResourcePath: "/*" # allows for logging on any resource
+      #     HttpMethod: "*" # allows for logging on any method
+      # AccessLogSetting:
+      #   Format: '{ "requestId":"$context.requestId", "ip": "$context.identity.sourceIp", "caller":"$context.identity.caller", "user":"$context.identity.user","requestTime":"$context.requestTime", "httpMethod":"$context.httpMethod","resourcePath":"$context.resourcePath", "status":"$context.status","protocol":"$context.protocol", "responseLength":"$context.responseLength" }'
+      # TracingEnabled: true
+      Name: Demo-Integrations-API
+      StageName: !Ref Stage
+      DefinitionBody:
+        Fn::Transform:
+          Name: AWS::Include
+          Parameters:
+            Location: openapi.yaml
+      Variables:
+        Stage: !Sub "${Stage}"
+      # Domain:
+      #   CertificateArn: !Sub "arn:aws:acm:${AWS::Region}:${AWS:AccountId}:certificate/4a3152c3-29a5-4ab6-994c-2a53d5ba9942"
+      #   DomainName: antran.info
+      #   Route53:
+      #     DistributionDomainName: antran.info
+      #     HostedZoneId: !Ref HostedZone # Z0460250ZHXZNX0R7YJ3
+
+  TestFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Runtime: nodejs16.x
+      PackageType: Zip
+      FunctionName: !Sub "${AppName}-test-func-${Stage}"
+      Description: Test Function
+      Handler: index.handler
+      InlineCode: |
+        exports.handler = (event, context)=>{
+          return Promise.resolve({
+              isBase64Encoded: false,
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              statusCode: 200,
+              body: event.stageVariables? JSON.stringify(event) : event
+          })
+        }
+      # MemorySize: 512
+      # Timeout: 30
+      Environment:
+        Variables:
+          LAMBDA: true
+      # Events:
+      #   ProxyApiRoot:
+      #     Type: Api
+      #     Properties:
+      #       RestApiId: !Ref DemoApi
+      #       Path: /
+      #       Method: ANY
+      #   ProxyApiGreedy:
+      #     Type: Api
+      #     Properties:
+      #       RestApiId: !Ref DemoApi
+      #       Path: /{proxy+}
+      #       Method: Any

@@ -1,0 +1,16 @@
+version=0.1
+ 
+[default.deploy.parameters]
+stack_name = "ApigwIntegrationDemoStack"
+s3_bucket = "deployments2131"
+s3_prefix = "apigw-integrations-demo"
+region = "us-east-1"
+capabilities = "CAPABILITY_NAMED_IAM"
+ 
+[default.build.parameters]
+manifest = "package.json"
+template_file = "template.yaml"
+
+[default.delete.parameters]
+stack_name = "ApigwIntegrationDemoStack"
+region = "us-east-1"
