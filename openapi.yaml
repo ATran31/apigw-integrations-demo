@@ -61,7 +61,9 @@ paths:
         timeoutInMillis: 3000
         type: "aws"
         requestTemplates:
-          # Transform request body before sending to Lambda
+          # Transform request body before sending to Lambda.
+          # In this example the caller will be sending {"name": <string>, "key": <string>} in the request body.
+          # APIGW will transform that to {"stage": <string>, "userId": <string>} before invoking the Lambda.
           "application/json": '#set ($root=$input.path(''$'')) { "stage": "$root.name", "userId": "$root.key" }'
         responses:
           "4\\d{2}":
@@ -71,8 +73,32 @@ paths:
           default:
             statusCode: 200
             responseTemplates:
-              # Transform Lambda response before sending back to API
-              "application/json": '#set ($root=$input.path(''$'')) { "responseName": "$root.body.stage", "responseKey": "$root.body.userId" }'
+              # Transform Lambda response before sending back to API.
+              # In this example the API will return {"stage": <string>, "userId": <string>}
+              # APIGW will transform that to {"responseName": <string>, "responseKey": <string>}
+              # before returning to the caller.
+
+              # Note how we cannot simply set the 'template_mapping_context': $context, or 'pre_transformation_body': $root.body.
+              # Without using the techniques shown below, the result would be:
+              # 'pre_transformation_body': {stage=stageVal, userId=idVal}
+              # instead of {"stage": "stageVal", "userId": "idVal"} as we would expect.
+              # Since $context is not accessible by the $input, we must manually loop every key-value pair of that object and assign.
+
+              application/json: |
+                #set ($root=$input.path('$'))
+                {
+                  "integration_type": "aws",
+                  "message": "Here we are taking the response returned by the Lambda call and creating a new JSON object.",
+                  "template_mapping_context": {
+                    #foreach($key in $context.keySet())
+                    "$key": "$util.escapeJavaScript($context.get($key))"
+                    #if($foreach.hasNext),#end
+                    #end
+                  },
+                  "raw_lambda_response": $input.body,
+                  "pre_transformation_body": $input.json('$.body'),
+                  "post_transformation_response": {"responseName": "$root.body.stage", "responseKey": "$root.body.userId"}
+                }
       passthroughBehavior: when_no_match
       responses:
         "200":
@@ -101,8 +127,10 @@ paths:
         uri:
           Fn::Sub: "arn:aws:apigateway:${AWS::Region}:s3:path/deployments2131"
         timeoutInMillis: 3000
-        requestParameters: |
-          {"integration.request.path.bucket": "method.request.path.bucket"}
+        requestParameters: >
+          {
+            "integration.request.path.bucket": "method.request.path.bucket"
+          }
         responses:
           "4\\d{2}":
             statusCode: 400
