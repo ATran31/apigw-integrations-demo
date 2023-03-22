@@ -75,6 +75,8 @@ Resources:
       Description: Test Function
       Handler: index.handler
       InlineCode: |
+        // Return the message if integration type is aws-proxy
+        // otherwise just return the incoming lambda event.
         exports.handler = (event, context)=>{
           return Promise.resolve({
               isBase64Encoded: false,
@@ -82,7 +84,7 @@ Resources:
                 'Content-Type': 'application/json',
               },
               statusCode: 200,
-              body: event.stageVariables? JSON.stringify(event) : event
+              body: event.stageVariables? JSON.stringify({"message": "This is the response from the Lambda when integration type is aws-proxy."}) : event
           })
         }
       # MemorySize: 512
